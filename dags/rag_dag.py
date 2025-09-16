@@ -28,7 +28,6 @@ _WEAVIATE_SCHEMA_PATH = os.getenv("WEAVIATE_SCHEMA_PATH")
 _CREATE_CLASS_TASK_ID = "create_class"
 _CLASS_ALREADY_EXISTS_TASK_ID = "class_already_exists"
 
-
 @dag(
     dag_display_name="📚 Ingest Knowledge Base",
     start_date=datetime(2024, 5, 1),

@@ -1,98 +1,100 @@
 import streamlit as st
+import os
 from openai import OpenAI
 import weaviate
-import os
 
 WEAVIATE_CLASS_NAME = os.getenv("WEAVIATE_CLASS_NAME")
 
 
+# -------------------------------
+# Weaviate Retrieval Functions
+# -------------------------------
 def get_relevant_chunks(user_prompt, limit=5, certainty=0.75):
-    import weaviate.classes as wvc
+    """Retrieve the most relevant chunks from Weaviate based on a user question."""
 
-    client = weaviate.connect_to_local(
-        host="weaviate",
-        port=8081,
-        auth_credentials=weaviate.auth.AuthApiKey("adminkey"),
-        headers={"X-OpenAI-Api-key": os.getenv("OPENAI_API_KEY")},
-        skip_init_checks=True,
+    client = weaviate.Client(
+        url="http://weaviate:8081",
+        auth_client_secret=weaviate.AuthApiKey("adminkey"),
+        additional_headers={"X-OpenAI-Api-Key": os.getenv("OPENAI_API_KEY")},
     )
 
-    try:
-        source = client.collections.get(WEAVIATE_CLASS_NAME)
+    response = (
+        client.query
+        .get(WEAVIATE_CLASS_NAME, ["title", "text", "folder_path"])
+        .with_near_text({"concepts": [user_prompt], "certainty": certainty})
+        .with_limit(limit)
+        .do()
+    )
 
-        response = source.query.near_text(
-            query=user_prompt,
-            distance=certainty,
-            return_metadata=wvc.query.MetadataQuery(distance=True),
-            limit=limit,
+    objects = response.get("data", {}).get("Get", {}).get(WEAVIATE_CLASS_NAME, [])
+
+    # Fallback if no objects match certainty
+    if not objects:
+        response = (
+            client.query
+            .get(WEAVIATE_CLASS_NAME, ["title", "text", "folder_path"])
+            .with_near_text({"concepts": [user_prompt]})
+            .with_limit(limit)
+            .do()
         )
+        objects = response.get("data", {}).get("Get", {}).get(WEAVIATE_CLASS_NAME, [])
 
-    finally:
-        client.close()
+    return objects
 
-    return response.objects
+def get_answer(chunks, user_prompt):
+    """Generate a concise answer to the user's question using the retrieved chunks."""
 
-
-def get_response(chunks, user_prompt):
-    inference_prompt = """You are the helpful social post generator Astra! You will create an interesting factoid post 
-    about Apache Airflow and the topic requested by the user:"""
-
+    context_text = ""
     for chunk in chunks:
-        chunk = chunk.properties
-        chunk_title = chunk["folder_path"] if chunk["folder_path"] else "unknown"
+        title = chunk.get("title", "unknown")
+        text = chunk.get("text", "no text")
+        context_text += f"Source: {title}\n{text}\n\n"
 
-        chunk_full_text = chunk["full_text"] if chunk["full_text"] else "no text"
+    inference_prompt = f"""
+        You are an expert assistant answering user questions based on the provided context. 
+        Provide a clear, concise answer. If the answer is not in the context, respond: 
+        'I could not find a reliable answer in the knowledge base.'
 
-        chunk_info = chunk_title + " Full text: " + chunk_full_text
-        inference_prompt += " " + chunk_info + " "
+        Context:
+        {context_text}
 
-    inference_prompt += "Your user asks:"
-
-    inference_prompt += " " + user_prompt
-
-    inference_prompt += """ 
-    Remember to keep the post short and sweet! At the end of the post add another sentence that is a space fact!"""
+        User question: {user_prompt}
+    """
 
     client = OpenAI()
-
-    champion_model_id = "gpt-4"
-
     chat_completion = client.chat.completions.create(
-        model=champion_model_id,
+        model="gpt-4",
         messages=[{"role": "user", "content": inference_prompt}],
     )
 
-    return chat_completion
+    return chat_completion.choices[0].message.content
 
 
-# ------------------ #
-# STREAMLIT APP CODE #
-# ------------------ #
+# -------------------------------
+# Streamlit App
+# -------------------------------
+st.title("Ask Junior")
+st.header("Ask a question")
 
-st.title("My own use case!")
-
-st.header("Search")
-
-user_prompt = st.text_input(
-    "Your post idea:",
-    "Create a LinkedIn post for me about dynamic task mapping!",
-)
+user_prompt = st.text_input("Your question:", "")
 limit = st.slider("Retrieve X most relevant chunks:", 1, 20, 5)
 certainty = st.slider("Certainty threshold for relevancy", 0.0, 1.0, 0.75)
 
-if st.button("Generate post!"):
+if st.button("Get Answer") and user_prompt:
     st.header("Answer")
-    with st.spinner(text="Thinking... :thinking_face:"):
+    with st.spinner(text="Searching knowledge base... 🤔"):
         chunks = get_relevant_chunks(user_prompt, limit=limit, certainty=certainty)
-        response = get_response(chunks=chunks, user_prompt=user_prompt)
+        answer = get_answer(chunks, user_prompt)
 
-        st.success("Done! :smile:")
-
-        st.write(response.choices[0].message.content)
+        st.success("Done! ✅")
+        st.write(answer)
 
         st.header("Sources")
-
-        for chunk in chunks:
-            st.write(f"URI: {chunk.properties['uri']}")
-            st.write(f"Chunk number: {int(chunk.properties['chunk_index'])}")
-            st.write("---")
+        if chunks:
+            for i, chunk in enumerate(chunks):
+                st.write(f"Source {i+1}:")
+                st.write(f"Title: {chunk.get('title', 'N/A')}")
+                st.write(f"Folder: {chunk.get('folder_path', 'N/A')}")
+                st.write("---")
+        else:
+            st.write("No sources found.")
