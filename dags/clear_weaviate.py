@@ -13,7 +13,7 @@
 # # Provider your Weaviate conn_id here.
 # WEAVIATE_CONN_ID = os.getenv("WEAVIATE_CONN_ID", "weaviate_default")
 # # Provide the class name to delete the schema.
-# WEAVIATE_CLASS_TO_DELETE = "MY_SCHEMA_TO_DELETE"
+# WEAVIATE_CLASS_TO_DELETE = "MYDATA"
 
 
 # @dag(

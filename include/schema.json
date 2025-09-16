@@ -2,7 +2,7 @@
     "classes": [
         {
             "class": "MYDATA",
-            "description": "Knowledge about Airflow",
+            "description": "Knowledge about Acme Corp products and services",
             "vectorizer": "text2vec-openai",
             "moduleConfig": {},
             "properties": [
