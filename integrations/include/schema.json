@@ -1,0 +1,33 @@
+{
+  "classes": [
+    {
+      "class": "MYDATA",
+      "description": "Knowledge base for RAG (Retrieval-Augmented Generation) containing documentation and guides",
+      "vectorizer": "text2vec-openai",
+      "moduleConfig": {
+        "text2vec-openai": {
+          "model": "ada",
+          "modelVersion": "002",
+          "type": "text"
+        }
+      },
+      "properties": [
+        {
+          "name": "title",
+          "dataType": ["text"],
+          "description": "Title of the document or section"
+        },
+        {
+          "name": "text",
+          "dataType": ["text"],
+          "description": "Content of the document chunk"
+        },
+        {
+          "name": "folder_path",
+          "dataType": ["text"],
+          "description": "Source folder path of the document"
+        }
+      ]
+    }
+  ]
+}

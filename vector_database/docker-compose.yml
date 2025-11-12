@@ -1,0 +1,47 @@
+services:
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.23.7
+    container_name: weaviate
+    restart: unless-stopped
+    command: "--host 0.0.0.0 --port 8081 --scheme http"
+    ports:
+      - "8081:8081"   # HTTP API
+      - "50051:50051" # gRPC API
+    environment:
+      # ==== Core ====
+      PERSISTENCE_DATA_PATH: /var/lib/weaviate
+      QUERY_DEFAULTS_LIMIT: 100
+      CLUSTER_HOSTNAME: node1
+
+      # ==== Authentication ====
+      AUTHENTICATION_APIKEY_ENABLED: "true"
+      AUTHENTICATION_APIKEY_ALLOWED_KEYS: "readonlykey,adminkey"
+      AUTHENTICATION_APIKEY_USERS: "lorenzouriel394@gmail.com,lorenzouriel394@gmail.com"
+
+      # ==== Modules ====
+      DEFAULT_VECTORIZER_MODULE: text2vec-openai
+      ENABLE_MODULES: text2vec-openai,backup-filesystem,qna-openai
+
+      # ==== Backups ====
+      BACKUP_FILESYSTEM_PATH: /var/lib/weaviate/backup
+
+      # ==== Resource Tuning ====
+      GOMAXPROCS: 4      # Adjust per CPU cores
+      GOMEMLIMIT: 6GiB   # Example for memory-limited environment
+
+      # ==== Logging ====
+      LOG_LEVEL: info
+      LOG_FORMAT: text
+
+    volumes:
+      - weaviate_data:/var/lib/weaviate       
+      - ./weaviate/backup:/var/lib/weaviate/backup
+    networks:
+      - weaviate
+
+volumes:
+  weaviate_data:
+
+networks:
+  weaviate:
+    driver: bridge

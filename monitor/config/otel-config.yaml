@@ -1,0 +1,42 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318  # Change to a different port
+
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector'
+          static_configs:
+            - targets: ['localhost:9464']  # OpenTelemetry metrics
+
+exporters:
+  otlphttp/logs:
+    endpoint: "http://loki:3100/otlp"
+    tls:
+      insecure: true
+
+  otlphttp/trace:
+    endpoint: "http://tempo:3200"
+    tls:
+      insecure: true
+
+  prometheus:
+    endpoint: "0.0.0.0:9464"
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      exporters: [otlphttp/logs]
+
+    traces:
+      receivers: [otlp]
+      exporters: [otlphttp/trace]
+
+    metrics:
+      receivers: [otlp]
+      exporters: [prometheus]
