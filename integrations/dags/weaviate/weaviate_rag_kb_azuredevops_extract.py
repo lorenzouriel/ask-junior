@@ -143,6 +143,16 @@ def azure_devops_sync():
         if not auth_url:
             raise ValueError("Azure DevOps credentials not configured")
 
+        # Ensure the target directory doesn't exist before cloning
+        if os.path.exists(REPO_PATH):
+            logging.warning(f"Directory exists at {REPO_PATH} but is not a valid repo. Removing it.")
+            try:
+                shutil.rmtree(REPO_PATH)
+                logging.info(f"Successfully removed existing directory at {REPO_PATH}")
+            except Exception as e:
+                logging.error(f"Failed to remove directory: {e}")
+                raise Exception(f"Cannot clone: directory exists and cannot be removed: {e}")
+
         logging.info(f"Cloning repository to {REPO_PATH}")
 
         # Ensure base directory exists
