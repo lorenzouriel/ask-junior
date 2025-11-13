@@ -2,9 +2,15 @@ import streamlit as st
 import os
 from openai import OpenAI
 import weaviate
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 WEAVIATE_CLASS_NAME = os.getenv("WEAVIATE_CLASS_NAME")
-
+WEAVIATE_URL= os.getenv("WEAVIATE_URL")
+WEAVIATE_AUTH = os.getenv("WEAVIATE_AUTH")
+OPEN_API_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # -------------------------------
 # Weaviate Retrieval Functions
@@ -13,8 +19,8 @@ def get_relevant_chunks(user_prompt, limit=5, certainty=0.75):
     """Retrieve the most relevant chunks from Weaviate based on a user question."""
 
     client = weaviate.Client(
-        url="http://weaviate:8081",
-        auth_client_secret=weaviate.AuthApiKey("adminkey"),
+        url=WEAVIATE_URL,
+        auth_client_secret=weaviate.AuthApiKey(WEAVIATE_AUTH),
         additional_headers={"X-OpenAI-Api-Key": os.getenv("OPENAI_API_KEY")},
     )
 
@@ -68,7 +74,6 @@ def get_answer(chunks, user_prompt):
     )
 
     return chat_completion.choices[0].message.content
-
 
 # -------------------------------
 # Streamlit App

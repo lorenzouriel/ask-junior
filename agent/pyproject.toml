@@ -4,4 +4,9 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "openai==1.19.0",
+    "python-dotenv==1.0.1",
+    "streamlit==1.33.0",
+    "weaviate-client==4.5.5",
+]
