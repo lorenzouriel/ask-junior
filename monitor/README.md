@@ -1,4 +1,4 @@
-# Greenhouse Monitoring Stack
+# Monitoring Stack
 
 A production-ready observability stack using OpenTelemetry, Prometheus, Loki, Tempo, and Grafana.
 
@@ -34,10 +34,6 @@ This stack implements the three pillars of observability:
    - Web UI: http://localhost:3000
    - Default credentials: admin/admin
 
-6. **Greenhouse App** - Sample Python application
-   - Instrumented with OpenTelemetry
-   - Exposes Prometheus metrics on port 8000
-
 ## Quick Start
 
 ### Prerequisites
@@ -65,7 +61,6 @@ docker-compose ps
 - **Prometheus**: http://localhost:9090
 - **Loki**: http://localhost:3100
 - **Tempo**: http://localhost:3200
-- **App Metrics**: http://localhost:8000
 
 ## Using Grafana
 
@@ -95,44 +90,6 @@ docker-compose ps
    - Span timeline and relationships
    - Correlated logs (click "Logs for this span")
    - Related metrics
-
-## Configuration
-
-### Environment Variables
-
-The greenhouse app supports these environment variables:
-
-- `OTEL_EXPORTER_OTLP_ENDPOINT` - OTLP collector endpoint (default: http://otel-collector:4317)
-- `OTEL_EXPORTER_OTLP_INSECURE` - Use insecure connection (default: true)
-
-### Resource Limits
-
-Each service has CPU and memory limits configured:
-
-| Service | CPU Limit | Memory Limit |
-|---------|-----------|--------------|
-| OTel Collector | 0.5 | 512MB |
-| Prometheus | 1.0 | 1GB |
-| Loki | 0.5 | 512MB |
-| Tempo | 0.5 | 512MB |
-| Grafana | 0.5 | 512MB |
-| App | 0.25 | 256MB |
-
-Adjust these in [docker-compose.yml](docker-compose.yml) based on your needs.
-
-### Data Persistence
-
-All data is persisted in Docker volumes:
-
-- `prometheus-data` - Metrics data (retention: configurable)
-- `loki-data` - Log data
-- `tempo-data` - Trace data (retention: 24h by default)
-- `grafana-data` - Dashboards and settings
-
-To reset all data:
-```bash
-docker-compose down -v
-```
 
 ## Monitoring Your Own Applications
 
@@ -225,33 +182,6 @@ docker run --rm -v monitor_loki-data:/data -v $(pwd):/backup ubuntu tar czf /bac
 docker run --rm -v monitor_grafana-data:/data -v $(pwd):/backup ubuntu tar czf /backup/grafana-backup.tar.gz /data
 ```
 
-## Troubleshooting
-
-### Services Won't Start
-
-Check logs:
-```bash
-docker-compose logs [service-name]
-```
-
-Common issues:
-- Port conflicts: Change port mappings in docker-compose.yml
-- Insufficient memory: Increase Docker memory limit or reduce service limits
-- Config errors: Validate YAML syntax in config files
-
-### No Data in Grafana
-
-1. Check service health: `docker-compose ps`
-2. Verify data sources in Grafana → Configuration → Data sources
-3. Check if app is sending data: `docker-compose logs greenhouse-app`
-4. Verify OTLP collector is receiving data: `docker-compose logs otel-collector`
-
-### High Memory Usage
-
-- Reduce retention periods in Tempo and Prometheus configs
-- Lower resource limits in docker-compose.yml
-- Reduce scrape intervals in prometheus.yml
-
 ## Production Considerations
 
 ### Security
@@ -273,15 +203,3 @@ Common issues:
 - Set up alerts in Prometheus for service health
 - Monitor disk usage for data volumes
 - Set up external health checks
-
-## Additional Resources
-
-- [OpenTelemetry Documentation](https://opentelemetry.io/docs/)
-- [Prometheus Documentation](https://prometheus.io/docs/)
-- [Loki Documentation](https://grafana.com/docs/loki/)
-- [Tempo Documentation](https://grafana.com/docs/tempo/)
-- [Grafana Documentation](https://grafana.com/docs/grafana/)
-
-## License
-
-This is an example monitoring stack for educational and development purposes.

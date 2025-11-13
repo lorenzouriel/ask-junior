@@ -144,35 +144,7 @@ services:
       - prometheus
       - loki
       - tempo
-
-  greenhouse-app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: greenhouse-app
-    ports:
-      - "8000:8000"  # Prometheus metrics endpoint
-    networks:
-      - monitoring
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 256M
-        reservations:
-          cpus: '0.1'
-          memory: 128M
-    depends_on:
-      - otel-collector
-    environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
-
+      
 networks:
   monitoring:
     driver: bridge

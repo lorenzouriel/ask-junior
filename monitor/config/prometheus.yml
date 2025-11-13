@@ -12,4 +12,4 @@ scrape_configs:
 
   - job_name: 'greenhouse-app'
     static_configs:
-      - targets: ['greenhouse-app:8000']  # Access containerized app
+      - targets: ['host.docker.internal:8000']  # Access app running on host machine
