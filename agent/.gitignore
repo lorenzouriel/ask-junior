@@ -1,5 +1,12 @@
-# Created by https://www.toptal.com/developers/gitignore/api/python
-# Edit at https://www.toptal.com/developers/gitignore?templates=python
+### Chainlit ###
+.chainlit/
+.files/
+### End of Chainlit ###
+
+### SQLLite ###
+*.db
+*.sqlite3
+### End of SQLLite ###
 
 ### Python ###
 # Byte-compiled / optimized / DLL files
