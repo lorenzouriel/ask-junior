@@ -23,7 +23,7 @@ This DAG synchronizes a knowledge base repository from Azure DevOps to the local
 - **Purpose**: Clones the Azure DevOps repository to local filesystem
 - **Runs**: Only if repository doesn't exist
 - **Authentication**: Uses PAT token embedded in clone URL
-- **Output**: Cloned repository at `/usr/local/airflow/include/knowledge_base`
+- **Output**: Cloned repository at `/opt/airflow/include/knowledge_base`
 
 ### 3. Pull Repository
 - **Task ID**: `pull_repository`
@@ -53,7 +53,7 @@ AZURE_DEVOPS_PAT = os.getenv("AZURE_DEVOPS_PAT")
 AZURE_DEVOPS_REPO_URL = os.getenv("AZURE_DEVOPS_REPO_URL")
 
 # Target directory for the repository
-REPO_BASE_DIR = "/usr/local/airflow/include"
+REPO_BASE_DIR = "/opt/airflow/include"
 REPO_NAME = "knowledge_base"
 REPO_PATH = os.path.join(REPO_BASE_DIR, REPO_NAME)
 

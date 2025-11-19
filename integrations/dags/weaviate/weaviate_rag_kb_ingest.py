@@ -1,6 +1,6 @@
 """
 ## Overview
-This DAG ingests text data from markdown files, chunks the text using LangChain's RecursiveCharacterTextSplitter, and ingests the chunks into a Weaviate vector database for Retrieval-Augmented Generation (RAG) applications.
+This DAG ingests text data from various document formats, intelligently chunks the text based on document type, and ingests the chunks into a Weaviate vector database for Retrieval-Augmented Generation (RAG) applications.
 
 ## DAG Information
 - **DAG ID**: `weaviate_rag_kb_ingest`
@@ -8,6 +8,11 @@ This DAG ingests text data from markdown files, chunks the text using LangChain'
 - **Start Date**: 2025-11-11
 - **Owner**: data_team/lorenzo.uriel
 - **Tags**: `rag`, `weaviate`
+
+## Supported File Formats
+- **Markdown** (`.md`): Structure-aware chunking using MarkdownHeaderTextSplitter
+- **PDF** (`.pdf`): Text extraction with PyPDF2
+- **Text** (`.txt`, `.rst`, `.text`): Standard text processing
 
 ## Task Flow
 
@@ -32,18 +37,26 @@ This DAG ingests text data from markdown files, chunks the text using LangChain'
 ### 4. Extract Document Text (Dynamic)
 - **Task ID**: `extract_document_text`
 - **Type**: Dynamically mapped task (runs in parallel for each folder)
-- **Purpose**: Reads all `.md` files from each folder
+- **Purpose**: Extracts text from various document formats
+- **Supported Formats**: `.md`, `.pdf`, `.txt`, `.rst`, `.text`
 - **Output**: DataFrame with columns:
   - `folder_path`: Source folder path
   - `title`: Document title (filename without extension)
-  - `text`: Full document text
+  - `text`: Extracted document text
+  - `file_extension`: File type for smart chunking
 
 ### 5. Chunk Text (Dynamic)
 - **Task ID**: `chunk_text`
 - **Type**: Dynamically mapped task (runs in parallel for each DataFrame)
 - **Purpose**: Splits documents into smaller chunks for better retrieval
-- **Uses**: LangChain's RecursiveCharacterTextSplitter
-- **Output**: DataFrame with chunked text
+- **Chunking Strategy**:
+  - **Markdown files**: MarkdownHeaderTextSplitter (structure-aware, preserves headers)
+  - **Other files**: RecursiveCharacterTextSplitter (general text chunking)
+  - **Secondary splitting**: Large chunks are further split to ensure optimal size
+- **Chunk Settings**:
+  - Chunk size: 1000 characters
+  - Overlap: 200 characters
+- **Output**: DataFrame with chunked text and metadata
 
 ### 6. Ingest Data (Dynamic)
 - **Task ID**: `ingest_data`
@@ -155,7 +168,7 @@ def rag_dag():
 
         # Convert relative path to absolute path based on Airflow home directory
         if not os.path.isabs(schema_json_path):
-            schema_json_path = os.path.join("/usr/local/airflow", schema_json_path)
+            schema_json_path = os.path.join("/opt/airflow", schema_json_path)
 
         with open(schema_json_path) as f:
             schema = json.load(f)
@@ -204,37 +217,75 @@ def rag_dag():
     )
     def extract_document_text(ingestion_folder_local_path):
         """
-        Extract information from markdown files in a folder.
+        Extract information from various document types in a folder.
+        Supports: .md (markdown), .txt, .rst, .pdf
+
         Args:
-            folder_path (str): Path to the folder containing markdown files.
+            folder_path (str): Path to the folder containing documents.
         Returns:
-            pd.DataFrame: A list of dictionaries containing the extracted information.
+            pd.DataFrame: DataFrame with columns: folder_path, title, text, file_extension
         """
         import pandas as pd
+        from PyPDF2 import PdfReader
+
+        # Supported file extensions for text extraction
+        supported_extensions = [".md", ".txt", ".rst", ".text", ".pdf"]
 
         files = [
-            f for f in os.listdir(ingestion_folder_local_path) if f.endswith(".md")
+            f for f in os.listdir(ingestion_folder_local_path)
+            if any(f.endswith(ext) for ext in supported_extensions)
         ]
 
         titles = []
         texts = []
+        file_extensions = []
 
         for file in files:
             file_path = os.path.join(ingestion_folder_local_path, file)
-            titles.append(file.split(".")[0])
 
-            with open(file_path, "r", encoding="utf-8") as f:
-                texts.append(f.read())
+            # Extract title (filename without extension)
+            title = os.path.splitext(file)[0]
+            file_ext = os.path.splitext(file)[1].lower()
+
+            titles.append(title)
+            file_extensions.append(file_ext)
+
+            # Read file content based on extension
+            if file_ext == ".pdf":
+                # Extract text from PDF
+                try:
+                    pdf_reader = PdfReader(file_path)
+                    text_content = ""
+                    for page in pdf_reader.pages:
+                        text_content += page.extract_text() + "\n"
+                    texts.append(text_content.strip())
+                except Exception as e:
+                    t_log.error(f"Error reading PDF {file}: {e}")
+                    texts.append("")
+            else:
+                # Read text-based files
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        texts.append(f.read())
+                except Exception as e:
+                    t_log.error(f"Error reading file {file}: {e}")
+                    texts.append("")
 
         document_df = pd.DataFrame(
             {
                 "folder_path": ingestion_folder_local_path,
                 "title": titles,
                 "text": texts,
+                "file_extension": file_extensions,
             }
         )
 
+        # Remove empty documents
+        document_df = document_df[document_df["text"].str.strip() != ""]
+        document_df.reset_index(drop=True, inplace=True)
+
         t_log.info(f"Number of records: {document_df.shape[0]}")
+        t_log.info(f"File types: {document_df['file_extension'].value_counts().to_dict()}")
 
         # get the current context and define the custom map index variable
         from airflow.sdk import get_current_context
@@ -253,27 +304,113 @@ def rag_dag():
     @task(map_index_template="{{ my_custom_map_index }}")
     def chunk_text(df):
         """
-        Chunk the text in the DataFrame.
+        Chunk the text in the DataFrame using appropriate splitter based on file type.
+        - Markdown files (.md): Uses MarkdownHeaderTextSplitter for structure-aware chunking
+        - Other files: Uses RecursiveCharacterTextSplitter for general text chunking
+
         Args:
             df (pd.DataFrame): The DataFrame containing the text to chunk.
         Returns:
             pd.DataFrame: The DataFrame with the text chunked.
         """
         import pandas as pd
-        from langchain_text_splitters import RecursiveCharacterTextSplitter
+        from langchain_text_splitters import (
+            RecursiveCharacterTextSplitter,
+            MarkdownHeaderTextSplitter
+        )
         from langchain_core.documents import Document
 
-        splitter = RecursiveCharacterTextSplitter()
+        def chunk_single_document(row):
+            """
+            Chunk a single document based on its file type.
+            - Markdown files (.md): Uses MarkdownHeaderTextSplitter for structure-aware chunking
+            - Other files: Uses RecursiveCharacterTextSplitter for general text chunking
 
-        df["chunks"] = df["text"].apply(
-            lambda x: splitter.split_documents([Document(page_content=x)])
-        )
+            Args:
+                row: DataFrame row containing 'title', 'text', and 'file_extension' columns
+            Returns:
+                list: List of Document objects representing chunks
+            """
+            text = row['text']
+            title = row['title']
+            file_extension = row.get('file_extension', '.md')
 
+            # Define chunk size and overlap settings
+            CHUNK_SIZE = 1000
+            CHUNK_OVERLAP = 200
+
+            # Check if this is a markdown file
+            if file_extension == '.md':
+                # Use MarkdownHeaderTextSplitter for markdown documents
+                headers_to_split_on = [
+                    ("#", "Header 1"),
+                    ("##", "Header 2"),
+                    ("###", "Header 3"),
+                    ("####", "Header 4"),
+                ]
+
+                markdown_splitter = MarkdownHeaderTextSplitter(
+                    headers_to_split_on=headers_to_split_on,
+                    strip_headers=False
+                )
+
+                try:
+                    # Split by headers first
+                    md_header_splits = markdown_splitter.split_text(text)
+
+                    # If the chunks are still too large, further split them
+                    recursive_splitter = RecursiveCharacterTextSplitter(
+                        chunk_size=CHUNK_SIZE,
+                        chunk_overlap=CHUNK_OVERLAP,
+                        length_function=len,
+                        is_separator_regex=False,
+                    )
+
+                    # Apply secondary splitting if needed
+                    final_chunks = []
+                    for doc in md_header_splits:
+                        # If chunk is larger than threshold, split it further
+                        if len(doc.page_content) > CHUNK_SIZE:
+                            sub_chunks = recursive_splitter.split_documents([doc])
+                            final_chunks.extend(sub_chunks)
+                        else:
+                            final_chunks.append(doc)
+
+                    return final_chunks if final_chunks else [Document(page_content=text)]
+
+                except Exception as e:
+                    t_log.warning(f"Markdown splitting failed for '{title}': {e}. Falling back to recursive splitter.")
+                    # Fall through to recursive splitter
+
+            # For non-markdown files or if markdown splitting failed, use RecursiveCharacterTextSplitter
+            recursive_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=CHUNK_SIZE,
+                chunk_overlap=CHUNK_OVERLAP,
+                length_function=len,
+                is_separator_regex=False,
+            )
+
+            chunks = recursive_splitter.split_documents([Document(page_content=text)])
+            return chunks if chunks else [Document(page_content=text)]
+
+        # Apply chunking to each row
+        df["chunks"] = df.apply(chunk_single_document, axis=1)
+
+        # Explode the chunks into separate rows
         df = df.explode("chunks", ignore_index=True)
         df.dropna(subset=["chunks"], inplace=True)
+
+        # Extract text content and metadata from Document objects
         df["text"] = df["chunks"].apply(lambda x: x.page_content)
+        df["chunk_metadata"] = df["chunks"].apply(lambda x: x.metadata)
+
+        # Drop the chunks column as we've extracted what we need
         df.drop(["chunks"], inplace=True, axis=1)
         df.reset_index(inplace=True, drop=True)
+
+        # Log chunking statistics
+        t_log.info(f"Total chunks created: {len(df)}")
+        t_log.info(f"Average chunk size: {df['text'].str.len().mean():.0f} characters")
 
         # get the current context and define the custom map index variable
         from airflow.sdk import get_current_context
