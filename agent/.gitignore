@@ -1,7 +1,6 @@
 ### Chainlit ###
 .chainlit/
 .files/
-chainlit.md
 ### End of Chainlit ###
 
 ### SQLLite ###

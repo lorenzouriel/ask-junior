@@ -277,6 +277,8 @@ def rag_dag():
                 "title": titles,
                 "text": texts,
                 "file_extension": file_extensions,
+                "source_filename": files,  # Original filename with extension
+                "source_type": [ext.lstrip('.') for ext in file_extensions],  # File type without dot
             }
         )
 
@@ -405,8 +407,32 @@ def rag_dag():
         df["text"] = df["chunks"].apply(lambda x: x.page_content)
         df["chunk_metadata"] = df["chunks"].apply(lambda x: x.metadata)
 
+        # Extract section headers from chunk metadata (for markdown documents)
+        def extract_section(metadata):
+            """Extract section info from markdown headers metadata."""
+            if not metadata:
+                return ""
+            # Prioritize lower-level headers for more specific context
+            for header_key in ["header_4", "header_3", "header_2", "header_1"]:
+                if header_key in metadata:
+                    return metadata[header_key]
+            return ""
+
+        df["section"] = df["chunk_metadata"].apply(extract_section)
+
+        # Create better title by combining filename with section when available
+        def create_enhanced_title(row):
+            """Create a more descriptive title combining filename and section."""
+            base_title = row["title"]
+            section = row.get("section", "")
+            if section and section != base_title:
+                return f"{base_title} - {section}"
+            return base_title
+
+        df["title"] = df.apply(create_enhanced_title, axis=1)
+
         # Drop the chunks column as we've extracted what we need
-        df.drop(["chunks"], inplace=True, axis=1)
+        df.drop(["chunks", "chunk_metadata"], inplace=True, axis=1)
         df.reset_index(inplace=True, drop=True)
 
         # Log chunking statistics

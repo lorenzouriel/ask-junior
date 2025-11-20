@@ -3,6 +3,7 @@ import os
 import time
 from openai import OpenAI
 import weaviate
+from weaviate.auth import AuthApiKey
 from dotenv import load_dotenv
 
 # Import observability and memory modules
@@ -31,6 +32,14 @@ memory_manager = MemoryManager(
     db_path=os.getenv("MEMORY_DB_PATH", "agent_memory.db")
 )
 
+# Initialize Weaviate client once at module level for connection reuse
+weaviate_client = weaviate.Client(
+    url=WEAVIATE_URL,
+    auth_client_secret=AuthApiKey(WEAVIATE_AUTH),
+    additional_headers={"X-OpenAI-Api-Key": os.getenv("OPENAI_API_KEY")},
+    timeout_config=(5, 60),  # (connect_timeout, read_timeout) in seconds
+)
+
 # -------------------------------
 # Weaviate Retrieval Functions
 # -------------------------------
@@ -46,15 +55,9 @@ def get_relevant_chunks(user_prompt, limit=5, certainty=0.75):
         }
     )
 
-    client = weaviate.Client(
-        url=WEAVIATE_URL,
-        auth_client_secret=weaviate.AuthApiKey(WEAVIATE_AUTH),
-        additional_headers={"X-OpenAI-Api-Key": os.getenv("OPENAI_API_KEY")},
-    )
-
     response = (
-        client.query
-        .get(WEAVIATE_CLASS_NAME, ["title", "text", "folder_path"])
+        weaviate_client.query
+        .get(WEAVIATE_CLASS_NAME, ["title", "text", "folder_path", "source_filename", "source_type", "section"])
         .with_near_text({"concepts": [user_prompt], "certainty": certainty})
         .with_limit(limit)
         .do()
@@ -66,8 +69,8 @@ def get_relevant_chunks(user_prompt, limit=5, certainty=0.75):
     if not objects:
         logger.warning(f"No chunks found with certainty {certainty}, retrying without certainty threshold")
         response = (
-            client.query
-            .get(WEAVIATE_CLASS_NAME, ["title", "text", "folder_path"])
+            weaviate_client.query
+            .get(WEAVIATE_CLASS_NAME, ["title", "text", "folder_path", "source_filename", "source_type", "section"])
             .with_near_text({"concepts": [user_prompt]})
             .with_limit(limit)
             .do()
@@ -94,8 +97,9 @@ def get_answer(chunks, user_prompt):
     context_text = ""
     for chunk in chunks:
         title = chunk.get("title", "unknown")
+        source_filename = chunk.get("source_filename", "unknown")
         text = chunk.get("text", "no text")
-        context_text += f"Source: {title}\n{text}\n\n"
+        context_text += f"Source: {title} (from {source_filename})\n{text}\n\n"
 
     inference_prompt = f"""
         You are an expert assistant answering user questions based on the provided context.
@@ -259,6 +263,9 @@ async def main(message: cl.Message):
             {
                 "title": chunk.get("title", "N/A"),
                 "folder_path": chunk.get("folder_path", "N/A"),
+                "source_filename": chunk.get("source_filename", "N/A"),
+                "source_type": chunk.get("source_type", "N/A"),
+                "section": chunk.get("section", ""),
                 "text": chunk.get("text", "")[:500]  # Store first 500 chars
             }
             for chunk in chunks
@@ -294,15 +301,29 @@ async def main(message: cl.Message):
             for i, chunk in enumerate(chunks):
                 title = chunk.get('title', 'N/A')
                 folder = chunk.get('folder_path', 'N/A')
+                source_filename = chunk.get('source_filename', 'N/A')
+                source_type = chunk.get('source_type', 'N/A')
+                section = chunk.get('section', '')
                 text = chunk.get('text', '')
 
-                sources_text += f"\n{i+1}. **{title}**\n   - Folder: {folder}\n"
+                # Display source filename prominently
+                sources_text += f"\n{i+1}. **{title}**\n   - File: {source_filename}\n   - Folder: {folder}\n"
 
-                # Create text elements for each source
+                # Create text elements for each source with more details
+                content_parts = [
+                    f"**Title:** {title}",
+                    f"**Source File:** {source_filename}",
+                    f"**Type:** {source_type}",
+                    f"**Folder:** {folder}",
+                ]
+                if section:
+                    content_parts.append(f"**Section:** {section}")
+                content_parts.append(f"\n**Content:**\n{text}")
+
                 elements.append(
                     cl.Text(
                         name=f"source_{i+1}",
-                        content=f"**Title:** {title}\n**Folder:** {folder}\n\n**Content:**\n{text}",
+                        content="\n".join(content_parts),
                         display="side"
                     )
                 )
