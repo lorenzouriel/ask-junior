@@ -342,11 +342,12 @@ def rag_dag():
             # Check if this is a markdown file
             if file_extension == '.md':
                 # Use MarkdownHeaderTextSplitter for markdown documents
+                # Use GraphQL-compliant names (must match /[_A-Za-z][_0-9A-Za-z]*/)
                 headers_to_split_on = [
-                    ("#", "Header 1"),
-                    ("##", "Header 2"),
-                    ("###", "Header 3"),
-                    ("####", "Header 4"),
+                    ("#", "header_1"),
+                    ("##", "header_2"),
+                    ("###", "header_3"),
+                    ("####", "header_4"),
                 ]
 
                 markdown_splitter = MarkdownHeaderTextSplitter(

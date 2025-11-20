@@ -19,12 +19,14 @@ For markdown files, the system splits on the following header levels:
 
 ```python
 headers_to_split_on = [
-    ("#", "Header 1"),
-    ("##", "Header 2"),
-    ("###", "Header 3"),
-    ("####", "Header 4"),
+    ("#", "header_1"),
+    ("##", "header_2"),
+    ("###", "header_3"),
+    ("####", "header_4"),
 ]
 ```
+
+> **Note**: Header names use underscores (e.g., `header_1`) to comply with Weaviate's GraphQL naming requirements (`/[_A-Za-z][_0-9A-Za-z]*/`).
 
 ## Supported File Formats
 
