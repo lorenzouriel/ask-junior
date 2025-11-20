@@ -60,8 +60,8 @@ class ObservabilityManager:
 
     def setup_tracing(self):
         """Setup distributed tracing with OTLP exporter."""
-        # Create tracer provider
-        self.tracer_provider = TracerProvider(resource=self.resource)
+        # Check if a tracer provider is already set
+        existing_provider = trace.get_tracer_provider()
 
         # Create OTLP span exporter
         otlp_exporter = OTLPSpanExporter(
@@ -71,10 +71,18 @@ class ObservabilityManager:
 
         # Add span processor
         span_processor = BatchSpanProcessor(otlp_exporter)
-        self.tracer_provider.add_span_processor(span_processor)
 
-        # Set global tracer provider
-        trace.set_tracer_provider(self.tracer_provider)
+        # Check if existing provider is a real TracerProvider (not NoOpTracerProvider)
+        if hasattr(existing_provider, 'add_span_processor'):
+            # Use existing provider, just add our exporter
+            existing_provider.add_span_processor(span_processor)
+            self.tracer_provider = existing_provider
+        else:
+            # Create new tracer provider
+            self.tracer_provider = TracerProvider(resource=self.resource)
+            self.tracer_provider.add_span_processor(span_processor)
+            # Set global tracer provider
+            trace.set_tracer_provider(self.tracer_provider)
 
         # Get tracer
         self.tracer = trace.get_tracer(__name__)
@@ -83,6 +91,9 @@ class ObservabilityManager:
 
     def setup_metrics(self):
         """Setup metrics collection with OTLP exporter."""
+        # Check if a meter provider is already set
+        existing_provider = metrics.get_meter_provider()
+
         # Create OTLP metric exporter
         otlp_exporter = OTLPMetricExporter(
             endpoint=self.otel_endpoint,
@@ -95,17 +106,28 @@ class ObservabilityManager:
             export_interval_millis=5000  # Export every 5 seconds (reduced for faster visibility)
         )
 
-        # Create meter provider
-        self.meter_provider = MeterProvider(
-            resource=self.resource,
-            metric_readers=[metric_reader]
-        )
+        # Check if existing provider is a real MeterProvider (not NoOpMeterProvider)
+        # Unfortunately, MeterProvider doesn't support adding readers after creation
+        # So we need to create a new one, but we can't override the global
+        # Instead, we'll create our own provider and use it directly
+        if hasattr(existing_provider, '_sdk_config'):
+            # A real provider exists, we need to create our own and use it directly
+            self.meter_provider = MeterProvider(
+                resource=self.resource,
+                metric_readers=[metric_reader]
+            )
+            # Don't set global - use our provider directly
+        else:
+            # Create meter provider
+            self.meter_provider = MeterProvider(
+                resource=self.resource,
+                metric_readers=[metric_reader]
+            )
+            # Set global meter provider
+            metrics.set_meter_provider(self.meter_provider)
 
-        # Set global meter provider
-        metrics.set_meter_provider(self.meter_provider)
-
-        # Get meter
-        self.meter = metrics.get_meter(__name__)
+        # Get meter from OUR provider (not global)
+        self.meter = self.meter_provider.get_meter(__name__)
 
         # Store exporter for manual flush
         self.metric_exporter = otlp_exporter
@@ -151,29 +173,35 @@ class ObservabilityManager:
             insecure=True
         )
 
-        # Create logger provider
+        # Create our own logger provider (don't rely on global)
         self.logger_provider = LoggerProvider(resource=self.resource)
 
         # Add log processor
         log_processor = BatchLogRecordProcessor(otlp_exporter)
         self.logger_provider.add_log_record_processor(log_processor)
 
-        # Set global logger provider
-        set_logger_provider(self.logger_provider)
+        # Try to set global logger provider, but don't fail if already set
+        try:
+            set_logger_provider(self.logger_provider)
+        except Exception:
+            pass  # Already set by another component
 
         # Setup standard logging
         logging.basicConfig(level=getattr(logging, log_level.upper()))
         self.logger = logging.getLogger(self.service_name)
 
-        # Attach OTLP handler to logger
+        # Attach OTLP handler to logger using OUR provider
         handler = LoggingHandler(
             level=getattr(logging, log_level.upper()),
             logger_provider=self.logger_provider
         )
         self.logger.addHandler(handler)
 
-        # Instrument logging
-        LoggingInstrumentor().instrument(set_logging_format=True)
+        # Instrument logging (only if not already instrumented)
+        try:
+            LoggingInstrumentor().instrument(set_logging_format=True)
+        except Exception:
+            pass  # Already instrumented
 
         return self.logger
 

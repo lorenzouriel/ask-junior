@@ -6,12 +6,16 @@ import weaviate
 from weaviate.auth import AuthApiKey
 from dotenv import load_dotenv
 
+# Load environment variables BEFORE importing observability
+# This ensures OTEL_ENDPOINT is available when the manager is created
+load_dotenv()
+
 # Import observability and memory modules
 from observability import observability_manager
 from memory import MemoryManager
 
-# Load environment variables from .env file
-load_dotenv()
+# Debug: Print the endpoint being used
+print(f"Observability endpoint: {observability_manager.otel_endpoint}")
 
 WEAVIATE_CLASS_NAME = os.getenv("WEAVIATE_CLASS_NAME")
 WEAVIATE_URL = os.getenv("WEAVIATE_URL")
@@ -350,6 +354,9 @@ async def main(message: cl.Message):
 
         # Force flush telemetry data to ensure it's sent to collector
         observability_manager.force_flush()
+        # Small delay to allow batch processor to complete export
+        import asyncio
+        await asyncio.sleep(0.5)
 
     except Exception as e:
         logger.error(
@@ -389,3 +396,6 @@ async def end():
             "avg_certainty_threshold": metrics.get("avg_certainty_threshold")
         }
     )
+
+    # Only flush telemetry data, don't shutdown (other sessions may still be active)
+    observability_manager.force_flush()
