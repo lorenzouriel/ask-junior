@@ -10,6 +10,10 @@ scrape_configs:
     static_configs:
       - targets: ['loki:3100']
 
-  - job_name: 'greenhouse-app'
+  - job_name: 'statsd-exporter'
     static_configs:
-      - targets: ['host.docker.internal:8000']  # Access app running on host machine
+      - targets: ['host.docker.internal:9102']
+
+  # - job_name: 'greenhouse-app'
+  #   static_configs:
+  #     - targets: ['host.docker.internal:8000'] 

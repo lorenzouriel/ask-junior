@@ -223,6 +223,8 @@ services:
     container_name: airflow-statsd-exporter
     command:
       - '--statsd.mapping-config=/tmp/statsd_mapping.yml'
+      - '--statsd.listen-udp=:8125'
+      - '--statsd.listen-tcp=:8125'
     ports:
       - "9102:9102"
       - "8125:8125/udp"
