@@ -2,7 +2,7 @@
 A Docker-based setup for running Weaviate, an open-source vector database designed for AI applications, semantic search, and machine learning workflows.
 
 ## Overview
-This project provides a production-ready Weaviate instance with:
+This project provides a Weaviate instance with:
 - OpenAI text vectorization capabilities
 - API key authentication
 - Persistent data storage
@@ -11,17 +11,23 @@ This project provides a production-ready Weaviate instance with:
 - Optimized resource configuration
 
 ## Quick Start
-1. Start the Weaviate service:
+1. Create the `.env`:
+```bash
+AUTHENTICATION_APIKEY_ENABLED=true
+AUTHENTICATION_APIKEY_ALLOWED_KEYS=readonlykey,adminkey
+AUTHENTICATION_APIKEY_USERS=email@gmail.com,email@gmail.com
+```
+2. Start the Weaviate service:
 ```bash
 docker-compose up -d
 ```
 
-2. Verify the service is running:
+3. Verify the service is running:
 ```bash
 docker ps
 ```
 
-3. Access the API at `http://localhost:8081`
+4. Access the API at `http://localhost:8081`
 
 ## Configuration
 ### Ports
@@ -58,7 +64,7 @@ Adjust these values in the docker-compose.yml based on your system resources.
 
 ## Monitoring
 Prometheus monitoring is enabled and exposed on port 2112. Access metrics at:
-```
+```bash
 http://localhost:2112/metrics
 ```
 

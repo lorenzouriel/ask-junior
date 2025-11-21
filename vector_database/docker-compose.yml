@@ -4,6 +4,8 @@ services:
     container_name: weaviate
     restart: unless-stopped
     command: "--host 0.0.0.0 --port 8081 --scheme http"
+    env_file:
+      - .env
     ports:
       - "8081:8081"   # HTTP API
       - "50051:50051" # gRPC API
@@ -15,9 +17,9 @@ services:
       CLUSTER_HOSTNAME: node1
 
       # ==== Authentication ====
-      AUTHENTICATION_APIKEY_ENABLED: "true"
-      AUTHENTICATION_APIKEY_ALLOWED_KEYS: "readonlykey,adminkey"
-      AUTHENTICATION_APIKEY_USERS: "lorenzouriel394@gmail.com,lorenzouriel394@gmail.com"
+      AUTHENTICATION_APIKEY_ENABLED: ${AUTHENTICATION_APIKEY_ENABLED}
+      AUTHENTICATION_APIKEY_ALLOWED_KEYS: ${AUTHENTICATION_APIKEY_ALLOWED_KEYS}
+      AUTHENTICATION_APIKEY_USERS: ${AUTHENTICATION_APIKEY_USERS}
 
       # ==== Modules ====
       DEFAULT_VECTORIZER_MODULE: text2vec-openai
@@ -35,7 +37,7 @@ services:
       LOG_FORMAT: text
 
       # ==== Monitoring ====
-      PROMETHEUS_MONITORING_ENABLED: true # <hostname>:2112/metrics
+      PROMETHEUS_MONITORING_ENABLED: true # hostname:2112/metrics
       PROMETHEUS_MONITORING_PORT: 2112
 
     volumes:
