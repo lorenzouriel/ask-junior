@@ -24,7 +24,7 @@ OPEN_API_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Default settings
 DEFAULT_LIMIT = 5
-DEFAULT_CERTAINTY = 0.75
+DEFAULT_CERTAINTY = 0.50
 
 # Initialize observability
 observability_manager.initialize(log_level=os.getenv("LOG_LEVEL", "INFO"))

@@ -1,10 +1,13 @@
 """
 ## Overview
-This DAG ingests text data from various document formats, intelligently chunks the text based on document type, and ingests the chunks into a Weaviate vector database for Retrieval-Augmented Generation (RAG) applications.
+This DAG ingests text data from various document formats, intelligently chunks the text based on document type,
+and ingests the chunks into a Weaviate vector database for Retrieval-Augmented Generation (RAG) applications.
+
+Uses **git-based change detection** to only process new or modified files, avoiding unnecessary reprocessing.
 
 ## DAG Information
 - **DAG ID**: `weaviate_rag_kb_ingest`
-- **Schedule**: `@daily` (runs once per day at midnight)
+- **Schedule**:  `0 */4 * * *` (every 4 hours)
 - **Start Date**: 2025-11-11
 - **Owner**: data_team/lorenzo.uriel
 - **Tags**: `rag`, `weaviate`
@@ -29,40 +32,47 @@ This DAG ingests text data from various document formats, intelligently chunks t
 - **Purpose**: Creates the Weaviate class using schema from JSON file
 - **Runs**: Only if class doesn't exist
 
-### 3. Fetch Ingestion Folders
-- **Task ID**: `fetch_ingestion_folders_local_paths`
-- **Purpose**: Lists all folders in the ingestion directory
-- **Returns**: List of folder paths to process
+### 3. Get Changed Files
+- **Task ID**: `get_changed_files`
+- **Purpose**: Uses git to detect files changed since last successful ingestion
+- **Returns**: List of changed file paths (relative to repo root)
 
-### 4. Extract Document Text (Dynamic)
+### 4. Fetch Ingestion Folders
+- **Task ID**: `fetch_ingestion_folders_local_paths`
+- **Purpose**: Lists folders that contain changed files
+- **Returns**: List of folder paths with changes to process
+
+### 5. Extract Document Text (Dynamic)
 - **Task ID**: `extract_document_text`
 - **Type**: Dynamically mapped task (runs in parallel for each folder)
-- **Purpose**: Extracts text from various document formats
+- **Purpose**: Extracts text only from changed documents
 - **Supported Formats**: `.md`, `.pdf`, `.txt`, `.rst`, `.text`
-- **Output**: DataFrame with columns:
-  - `folder_path`: Source folder path
-  - `title`: Document title (filename without extension)
-  - `text`: Extracted document text
-  - `file_extension`: File type for smart chunking
+- **Output**: DataFrame with extracted document data
 
-### 5. Chunk Text (Dynamic)
+### 6. Chunk Text (Dynamic)
 - **Task ID**: `chunk_text`
 - **Type**: Dynamically mapped task (runs in parallel for each DataFrame)
 - **Purpose**: Splits documents into smaller chunks for better retrieval
 - **Chunking Strategy**:
   - **Markdown files**: MarkdownHeaderTextSplitter (structure-aware, preserves headers)
   - **Other files**: RecursiveCharacterTextSplitter (general text chunking)
-  - **Secondary splitting**: Large chunks are further split to ensure optimal size
 - **Chunk Settings**:
   - Chunk size: 1000 characters
   - Overlap: 200 characters
-- **Output**: DataFrame with chunked text and metadata
 
-### 6. Ingest Data (Dynamic)
+### 7. Delete Old Chunks (Dynamic)
+- **Task ID**: `delete_old_chunks`
+- **Purpose**: Removes existing chunks for files being re-ingested
+- **Runs**: Before ingesting updated content
+
+### 8. Ingest Data (Dynamic)
 - **Task ID**: `ingest_data`
 - **Type**: Dynamically mapped task (runs in parallel for each chunk set)
 - **Purpose**: Ingests chunks into Weaviate vector database
-- **Operator**: `WeaviateIngestOperator`
+
+### 9. Update Last Commit
+- **Task ID**: `update_last_commit`
+- **Purpose**: Stores the current git commit hash for next run's change detection
 """
 
 from airflow.sdk import dag, task
@@ -82,6 +92,9 @@ _WEAVIATE_CLASS_NAME = os.getenv("WEAVIATE_CLASS_NAME")
 _WEAVIATE_VECTORIZER = os.getenv("WEAVIATE_VECTORIZER")
 _WEAVIATE_SCHEMA_PATH = os.getenv("WEAVIATE_SCHEMA_PATH")
 
+# Airflow Variable name to store last processed git commit
+_LAST_COMMIT_VAR_NAME = "rag_ingest_last_commit"
+
 _CREATE_CLASS_TASK_ID = "create_class"
 _CLASS_ALREADY_EXISTS_TASK_ID = "class_already_exists"
 
@@ -89,7 +102,7 @@ _CLASS_ALREADY_EXISTS_TASK_ID = "class_already_exists"
     dag_display_name="weaviate_rag_kb_ingest",
     description="Ingest knowledge into the vector database for RAG.",
     start_date=datetime(2025, 11, 11),
-    schedule="@daily",
+    schedule='0 */4 * * *',
     catchup=False,
     max_consecutive_failed_dag_runs=5,
     tags=["rag", "weaviate"],
@@ -102,8 +115,8 @@ _CLASS_ALREADY_EXISTS_TASK_ID = "class_already_exists"
     doc_md=__doc__,
 )
 def rag_dag():
-    # Import heavy dependencies inside the DAG function to speed up DAG parsing
-    from airflow.providers.weaviate.operators.weaviate import WeaviateIngestOperator
+    # Import lightweight dependencies at DAG level
+    # Note: Heavy weaviate imports are done inside tasks at runtime to avoid DAG parse timeout
     from airflow.providers.standard.operators.empty import EmptyOperator
     from airflow.models.baseoperator import chain
 
@@ -116,11 +129,13 @@ def rag_dag():
     ):
         """
         Check if the target class exists in the Weaviate schema.
+        
         Args:
             conn_id: The connection ID to use.
             class_name: The name of the class to check.
             create_class_task_id: The task ID to execute if the class does not exist.
             class_already_exists_task_id: The task ID to execute if the class already exists.
+        
         Returns:
             str: Task ID of the next task to execute.
         """
@@ -154,6 +169,7 @@ def rag_dag():
     ) -> None:
         """
         Create a class in the Weaviate schema.
+        
         Args:
             conn_id: The connection ID to use.
             class_name: The name of the class to create.
@@ -194,47 +210,206 @@ def rag_dag():
     chain(check_class_obj, [create_class_obj, class_already_exists], weaviate_ready)
 
     @task
-    def fetch_ingestion_folders_local_paths(ingestion_folders_local_path):
-        # get all the folders in the given location
+    def get_changed_files(ingestion_folders_local_path: str, last_commit_var_name: str) -> dict:
+        """
+        Get list of files changed since last successful ingestion using git.
+
+        Args:
+            ingestion_folders_local_path: Base path to the ingestion folders
+            last_commit_var_name: Airflow Variable name storing last processed commit
+
+        Returns:
+            dict with:
+                - changed_files: List of changed file paths (relative to ingestion folder)
+                - current_commit: Current git commit hash
+                - is_initial_run: True if no previous commit (process all files)
+        """
+        import subprocess
+        from airflow.models import Variable
+
+        # Get the last processed commit from Airflow Variable
+        last_commit = Variable.get(last_commit_var_name, default_var=None)
+
+        # Get current commit hash
+        try:
+            current_commit = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=ingestion_folders_local_path,
+                text=True
+            ).strip()
+        except subprocess.CalledProcessError as e:
+            t_log.warning(f"Failed to get current git commit: {e}. Will process all files.")
+            return {
+                "changed_files": None,  # None means process all files
+                "current_commit": None,
+                "is_initial_run": True
+            }
+
+        # If no previous commit, this is initial run - process all files
+        if not last_commit:
+            t_log.info(f"Initial run - no previous commit found. Will process all files.")
+            return {
+                "changed_files": None,
+                "current_commit": current_commit,
+                "is_initial_run": True
+            }
+
+        # Get changed files since last commit
+        try:
+            # Get files that were added, modified, or renamed
+            diff_output = subprocess.check_output(
+                ["git", "diff", "--name-only", "--diff-filter=AMR", last_commit, "HEAD"],
+                cwd=ingestion_folders_local_path,
+                text=True
+            ).strip()
+
+            if diff_output:
+                changed_files = diff_output.split('\n')
+                # Filter to only supported file types
+                supported_extensions = {".md", ".txt", ".rst", ".text", ".pdf"}
+                changed_files = [
+                    f for f in changed_files
+                    if os.path.splitext(f)[1].lower() in supported_extensions
+                ]
+            else:
+                changed_files = []
+
+            t_log.info(f"Found {len(changed_files)} changed files since commit {last_commit[:8]}")
+            t_log.info(f"Changed files: {changed_files}")
+
+            return {
+                "changed_files": changed_files,
+                "current_commit": current_commit,
+                "is_initial_run": False
+            }
+
+        except subprocess.CalledProcessError as e:
+            t_log.warning(f"Failed to get git diff: {e}. Will process all files.")
+            return {
+                "changed_files": None,
+                "current_commit": current_commit,
+                "is_initial_run": True
+            }
+
+    get_changed_files_obj = get_changed_files(
+        ingestion_folders_local_path=_INGESTION_FOLDERS_LOCAL_PATHS,
+        last_commit_var_name=_LAST_COMMIT_VAR_NAME
+    )
+
+    @task
+    def fetch_ingestion_folders_local_paths(ingestion_folders_local_path, changed_files_info: dict):
+        """
+        Get folders that contain changed files.
+
+        Args:
+            ingestion_folders_local_path: Base path to ingestion folders
+            changed_files_info: Dict from get_changed_files task
+
+        Returns:
+            List of dicts with folder_path and changed_files for each folder
+        """
         folders = os.listdir(ingestion_folders_local_path)
 
-        # filter out folders to ignore (e.g., .git, .vscode, node_modules, etc.)
+        # filter out folders to ignore (.git, .vscode, node_modules, etc.)
         ignore_folders = {'.git', '.vscode', '.idea', 'node_modules', '__pycache__', '.DS_Store'}
 
-        # return the full path of the folders, excluding ignored ones
-        return [
-            os.path.join(ingestion_folders_local_path, folder)
-            for folder in folders
+        # Get all valid folders
+        all_folders = [
+            folder for folder in folders
             if folder not in ignore_folders and os.path.isdir(os.path.join(ingestion_folders_local_path, folder))
         ]
 
+        changed_files = changed_files_info.get("changed_files")
+        is_initial_run = changed_files_info.get("is_initial_run", False)
+
+        # If initial run or no changed files info, return all folders
+        if is_initial_run or changed_files is None:
+            t_log.info(f"Initial run - processing all {len(all_folders)} folders")
+            return [
+                {
+                    "folder_path": os.path.join(ingestion_folders_local_path, folder),
+                    "changed_files": None  # None means process all files in folder
+                }
+                for folder in all_folders
+            ]
+
+        # If no files changed, return empty list
+        if not changed_files:
+            t_log.info("No files changed - nothing to process")
+            return []
+
+        # Group changed files by folder
+        folders_with_changes = {}
+        for file_path in changed_files:
+            # Get the first directory component (folder name)
+            parts = file_path.split('/')
+            if len(parts) >= 2:
+                folder_name = parts[0]
+                file_name = '/'.join(parts[1:])  # Rest of the path
+            else:
+                # File is in root, use root folder
+                folder_name = ""
+                file_name = file_path
+
+            if folder_name in all_folders:
+                if folder_name not in folders_with_changes:
+                    folders_with_changes[folder_name] = []
+                folders_with_changes[folder_name].append(file_name)
+
+        t_log.info(f"Found changes in {len(folders_with_changes)} folders: {list(folders_with_changes.keys())}")
+
+        # Return folders with their changed files
+        return [
+            {
+                "folder_path": os.path.join(ingestion_folders_local_path, folder),
+                "changed_files": files
+            }
+            for folder, files in folders_with_changes.items()
+        ]
+
     fetch_ingestion_folders_local_paths_obj = fetch_ingestion_folders_local_paths(
-        ingestion_folders_local_path=_INGESTION_FOLDERS_LOCAL_PATHS
+        ingestion_folders_local_path=_INGESTION_FOLDERS_LOCAL_PATHS,
+        changed_files_info=get_changed_files_obj
     )
 
     @task(
         map_index_template="{{ my_custom_map_index }}",
     )
-    def extract_document_text(ingestion_folder_local_path):
+    def extract_document_text(folder_info: dict):
         """
-        Extract information from various document types in a folder.
+        Extract information from changed document types in a folder.
         Supports: .md (markdown), .txt, .rst, .pdf
 
         Args:
-            folder_path (str): Path to the folder containing documents.
+            folder_info: Dict with folder_path and changed_files (list or None for all)
+        
         Returns:
             pd.DataFrame: DataFrame with columns: folder_path, title, text, file_extension
         """
         import pandas as pd
         from PyPDF2 import PdfReader
 
+        ingestion_folder_local_path = folder_info["folder_path"]
+        changed_files = folder_info.get("changed_files")
+
         # Supported file extensions for text extraction
         supported_extensions = [".md", ".txt", ".rst", ".text", ".pdf"]
 
-        files = [
+        # Get all supported files in folder
+        all_files = [
             f for f in os.listdir(ingestion_folder_local_path)
             if any(f.endswith(ext) for ext in supported_extensions)
         ]
+
+        # Filter to only changed files if specified
+        if changed_files is not None:
+            # Extract just the filename from changed_files paths
+            changed_filenames = {os.path.basename(f) for f in changed_files}
+            files = [f for f in all_files if f in changed_filenames]
+            t_log.info(f"Processing {len(files)} changed files out of {len(all_files)} total")
+        else:
+            files = all_files
+            t_log.info(f"Processing all {len(files)} files (initial run)")
 
         titles = []
         texts = []
@@ -300,7 +475,7 @@ def rag_dag():
         return document_df
 
     extract_document_text_obj = extract_document_text.expand(
-        ingestion_folder_local_path=fetch_ingestion_folders_local_paths_obj
+        folder_info=fetch_ingestion_folders_local_paths_obj
     )
 
     @task(map_index_template="{{ my_custom_map_index }}")
@@ -312,6 +487,7 @@ def rag_dag():
 
         Args:
             df (pd.DataFrame): The DataFrame containing the text to chunk.
+        
         Returns:
             pd.DataFrame: The DataFrame with the text chunked.
         """
@@ -452,16 +628,158 @@ def rag_dag():
 
     chunk_text_obj = chunk_text.expand(df=extract_document_text_obj)
 
-    ingest_data = WeaviateIngestOperator.partial(
-        task_id="ingest_data",
+    @task(map_index_template="{{ my_custom_map_index }}")
+    def delete_old_chunks(df, conn_id: str, class_name: str):
+        """
+        Delete existing chunks for files that are being re-ingested.
+        This ensures we don't have duplicate or stale chunks.
+
+        Args:
+            df: DataFrame with chunks to ingest
+            conn_id: Weaviate connection ID
+            class_name: Weaviate class name
+
+        Returns:
+            The same DataFrame (pass-through for chaining)
+        """
+        from airflow.providers.weaviate.hooks.weaviate import WeaviateHook
+        from airflow.sdk import get_current_context
+
+        if df.empty:
+            context = get_current_context()
+            context["my_custom_map_index"] = "Empty DataFrame - nothing to delete"
+            return df
+
+        hook = WeaviateHook(conn_id)
+        client = hook.get_client()
+
+        # Get unique source files from the DataFrame
+        source_files = df['source_filename'].unique().tolist()
+        folder_path = df['folder_path'].iloc[0] if not df.empty else "unknown"
+
+        deleted_count = 0
+        for source_file in source_files:
+            try:
+                # Delete all existing chunks for this source file
+                result = client.batch.delete_objects(
+                    class_name=class_name,
+                    where={
+                        "path": ["source_filename"],
+                        "operator": "Equal",
+                        "valueText": source_file
+                    }
+                )
+                if result and hasattr(result, 'successful'):
+                    deleted_count += result.successful
+                t_log.info(f"Deleted old chunks for: {source_file}")
+            except Exception as e:
+                t_log.warning(f"Error deleting old chunks for {source_file}: {e}")
+
+        t_log.info(f"Deleted {deleted_count} old chunks for {len(source_files)} files")
+
+        context = get_current_context()
+        context["my_custom_map_index"] = (
+            f"Deleted old chunks from {folder_path}: {deleted_count} chunks for {len(source_files)} files"
+        )
+
+        return df
+
+    delete_old_chunks_obj = delete_old_chunks.partial(
         conn_id=_WEAVIATE_CONN_ID,
         class_name=_WEAVIATE_CLASS_NAME,
-        map_index_template="Ingested files from: {{ task.input_data.to_dict()['folder_path'][0] }}.",
-    ).expand(input_data=chunk_text_obj)
+    ).expand(df=chunk_text_obj)
 
+    @task(map_index_template="{{ my_custom_map_index }}")
+    def ingest_data(df, conn_id: str, class_name: str):
+        """
+        Ingest data into Weaviate using the WeaviateHook directly.
+        This avoids importing the heavy WeaviateIngestOperator at DAG parse time.
+
+        Args:
+            df: DataFrame with chunks to ingest
+            conn_id: Weaviate connection ID
+            class_name: Weaviate class name
+        """
+        from airflow.providers.weaviate.hooks.weaviate import WeaviateHook
+        from airflow.sdk import get_current_context
+
+        if df.empty:
+            context = get_current_context()
+            context["my_custom_map_index"] = "Empty DataFrame - nothing to ingest"
+            return
+
+        hook = WeaviateHook(conn_id)
+        client = hook.get_client()
+
+        folder_path = df['folder_path'].iloc[0] if not df.empty else "unknown"
+
+        # Convert DataFrame to list of dicts for batch ingestion
+        records = df.to_dict(orient='records')
+
+        # Use batch import for efficiency
+        with client.batch as batch:
+            for record in records:
+                # Prepare the data object
+                data_object = {
+                    "title": record.get("title", ""),
+                    "text": record.get("text", ""),
+                    "folder_path": record.get("folder_path", ""),
+                    "source_filename": record.get("source_filename", ""),
+                    "source_type": record.get("source_type", ""),
+                    "section": record.get("section", ""),
+                }
+
+                batch.add_data_object(
+                    data_object=data_object,
+                    class_name=class_name
+                )
+
+        t_log.info(f"Successfully ingested {len(records)} records into {class_name}")
+
+        context = get_current_context()
+        context["my_custom_map_index"] = (
+            f"Ingested {len(records)} chunks from {folder_path}"
+        )
+
+    ingest_data_obj = ingest_data.partial(
+        conn_id=_WEAVIATE_CONN_ID,
+        class_name=_WEAVIATE_CLASS_NAME,
+    ).expand(df=delete_old_chunks_obj)
+
+    @task
+    def update_last_commit(changed_files_info: dict, last_commit_var_name: str):
+        """
+        Update the Airflow Variable with the current git commit hash.
+        This marks this commit as processed for the next run.
+
+        Args:
+            changed_files_info: Dict from get_changed_files task
+            last_commit_var_name: Airflow Variable name to update
+        """
+        from airflow.models import Variable
+
+        current_commit = changed_files_info.get("current_commit")
+        if current_commit:
+            Variable.set(last_commit_var_name, current_commit)
+            t_log.info(f"Updated last processed commit to: {current_commit}")
+        else:
+            t_log.warning("No commit hash available to save")
+
+    update_last_commit_obj = update_last_commit(
+        changed_files_info=get_changed_files_obj,
+        last_commit_var_name=_LAST_COMMIT_VAR_NAME
+    )
+
+    # Define task dependencies
     chain(
-        [chunk_text_obj, weaviate_ready],
-        ingest_data,
+        weaviate_ready,
+        get_changed_files_obj,
+        fetch_ingestion_folders_local_paths_obj,
+        extract_document_text_obj,
+        chunk_text_obj,
+        delete_old_chunks_obj,
+        ingest_data_obj,
+        update_last_commit_obj,
     )
 
 

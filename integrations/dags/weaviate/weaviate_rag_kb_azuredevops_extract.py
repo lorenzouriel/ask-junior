@@ -1,5 +1,7 @@
 """
-This DAG synchronizes a knowledge base repository from Azure DevOps to the local Airflow environment. It intelligently clones the repository on first run and pulls the latest changes on subsequent runs, ensuring the knowledge base is always up-to-date for the ingestion DAG.
+This DAG synchronizes a knowledge base repository from Azure DevOps to the local Airflow environment. 
+It intelligently clones the repository on first run and pulls the latest changes on subsequent runs, 
+ensuring the knowledge base is always up-to-date for the ingestion DAG.
 
 ## DAG Information
 - **DAG ID**: `weaviate_rag_kb_azuredevops_extract`
@@ -77,7 +79,7 @@ else:
     schedule='0 */3 * * *',
     start_date=datetime(2025, 11, 11),
     catchup=False,
-    tags=['azure-devops', 'git', 'rag'],
+    tags=['azure-devops', 'git', 'rag','extract'],
     default_args={
         'owner': 'data_team/lorenzo.uriel',
         'retries': 2,
