@@ -1,2 +1,0 @@
-[ask_junior]
-10.0.0.112 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/id_rsa
