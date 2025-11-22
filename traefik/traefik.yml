@@ -1,0 +1,28 @@
+# Traefik Static Configuration
+# Ask-Junior Reverse Proxy
+
+api:
+  dashboard: true
+  insecure: true  # Enable dashboard on port 8080
+
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: traefik-network
+  file:
+    directory: "/etc/traefik/config"
+    watch: true
+
+log:
+  level: INFO
+  format: common
+
+accessLog:
+  format: common

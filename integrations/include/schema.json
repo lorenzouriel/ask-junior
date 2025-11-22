@@ -1,0 +1,88 @@
+{
+  "classes": [
+    {
+      "class": "MYDATA",
+      "description": "Knowledge base for RAG containing technical documentation, project guides, and structured content.",
+      "vectorizer": "text2vec-openai",
+      "moduleConfig": {
+        "text2vec-openai": {
+          "model": "ada",
+          "modelVersion": "002",
+          "type": "text"
+        }
+      },
+      "properties": [
+        {
+          "name": "title",
+          "dataType": ["text"],
+          "description": "Title of the document, section, or heading related to this chunk."
+        },
+        {
+          "name": "text",
+          "dataType": ["text"],
+          "description": "Text content of the chunk."
+        },
+        {
+          "name": "document_id",
+          "dataType": ["text"],
+          "description": "Stable ID referencing the source document this chunk belongs to."
+        },
+        {
+          "name": "chunk_id",
+          "dataType": ["int"],
+          "description": "Sequential ID for reordering chunks from the same document."
+        },
+        {
+          "name": "section",
+          "dataType": ["text"],
+          "description": "Section or subheading where this chunk was extracted."
+        },
+        {
+          "name": "source_filename",
+          "dataType": ["text"],
+          "description": "Original filename of the document."
+        },
+        {
+          "name": "folder_path",
+          "dataType": ["text"],
+          "description": "Folder path where the document was located."
+        },
+        {
+          "name": "source_type",
+          "dataType": ["text"],
+          "description": "Source file type (pdf, md, docx, txt, etc.)."
+        },
+        {
+          "name": "last_modified",
+          "dataType": ["date"],
+          "description": "Last modified timestamp of the original file."
+        },
+        {
+          "name": "indexed_at",
+          "dataType": ["date"],
+          "description": "Timestamp when this chunk was added or updated in the vector DB."
+        },
+        {
+          "name": "tags",
+          "dataType": ["text[]"],
+          "description": "List of topic tags or custom metadata added during ingestion."
+        },
+        {
+          "name": "category",
+          "dataType": ["text"],
+          "description": "High-level document classification (architecture, devops, finance, etc.)."
+        },
+        {
+          "name": "hash",
+          "dataType": ["text"],
+          "description": "Hash of the chunk text used for detecting changes and preventing duplicates."
+        },
+        {
+          "name": "pipeline_version",
+          "dataType": ["text"],
+          "description": "Version of the ingestion pipeline that processed this chunk."
+        }
+      ]
+    }
+  ]
+}
