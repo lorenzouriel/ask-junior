@@ -84,7 +84,6 @@ Ask Junior is built as a microservices architecture with five core services that
 | [integrations/](integrations/) | ETL & RAG pipeline for document processing | 8080 | Apache Airflow |
 | [traefik/](traefik/) | Reverse proxy and load balancer | 80/443 | Traefik v3.0 |
 | [vector_database/](vector_database/) | Semantic search engine | 8081 | Weaviate |
-| [infraestructure/](infraestructure/) | Infrastructure-as-Code | - | Ansible, Make |
 
 ## Data Flow
 
@@ -260,6 +259,7 @@ Cloud-native reverse proxy:
 
 ## License
 MIT License
+
 ## Support
 - Issues: https://github.com/lorenzouriel/ask-junior/issues
 - Documentation: See individual service README files
