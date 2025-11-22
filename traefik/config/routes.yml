@@ -1,0 +1,106 @@
+# Traefik Dynamic Configuration - Routes
+# Ask-Junior Service Routing
+
+http:
+  routers:
+    # ===================
+    # AGENT SERVICE
+    # ===================
+    agent:
+      rule: "Host(`agent.local`)"
+      service: agent
+      entryPoints:
+        - web
+
+    # ===================
+    # AIRFLOW (Integrations)
+    # ===================
+    airflow:
+      rule: "Host(`airflow.local`)"
+      service: airflow
+      entryPoints:
+        - web
+
+    # ===================
+    # MONITORING STACK
+    # ===================
+    grafana:
+      rule: "Host(`grafana.local`)"
+      service: grafana
+      entryPoints:
+        - web
+
+    prometheus:
+      rule: "Host(`prometheus.local`)"
+      service: prometheus
+      entryPoints:
+        - web
+
+    loki:
+      rule: "Host(`loki.local`)"
+      service: loki
+      entryPoints:
+        - web
+
+    tempo:
+      rule: "Host(`tempo.local`)"
+      service: tempo
+      entryPoints:
+        - web
+
+    # ===================
+    # VECTOR DATABASE
+    # ===================
+    weaviate:
+      rule: "Host(`weaviate.local`)"
+      service: weaviate
+      entryPoints:
+        - web
+
+  services:
+    # ===================
+    # AGENT SERVICE
+    # ===================
+    agent:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:8000"
+
+    # ===================
+    # AIRFLOW (Integrations)
+    # ===================
+    airflow:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:8080"
+
+    # ===================
+    # MONITORING STACK
+    # ===================
+    grafana:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:3000"
+
+    prometheus:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:9090"
+
+    loki:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:3100"
+
+    tempo:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:3200"
+
+    # ===================
+    # VECTOR DATABASE
+    # ===================
+    weaviate:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:8081"
