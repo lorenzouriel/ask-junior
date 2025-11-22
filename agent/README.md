@@ -1,9 +1,7 @@
 # Ask Junior Agent
-
 A conversational AI agent built with Chainlit, featuring RAG (Retrieval-Augmented Generation) using Weaviate vector database, complete observability with OpenTelemetry, and conversation memory with SQLite.
 
 ## Features
-
 - **Conversational Interface**: Built with Chainlit for a modern chat experience
 - **RAG Pipeline**: Retrieves relevant context from Weaviate vector database
 - **LLM Integration**: Uses OpenAI GPT-4 for intelligent responses
@@ -16,7 +14,6 @@ A conversational AI agent built with Chainlit, featuring RAG (Retrieval-Augmente
 - **Configurable Settings**: Adjustable chunk retrieval and certainty thresholds
 
 ## Architecture
-
 ```
 User Query → Chainlit UI → Weaviate (Vector Search) → OpenAI GPT-4 → Response
                 ↓
@@ -31,20 +28,18 @@ User Query → Chainlit UI → Weaviate (Vector Search) → OpenAI GPT-4 → Res
 ```
 
 ## Prerequisites
-
 - Python 3.9+
 - Docker (for observability stack)
 - Weaviate instance running
 - OpenAI API key
 
 ## Installation
-
 1. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Copy .env.example to .env and configure:
+2. Copy `.env.example` to `.env` and configure:
 ```bash
 cp .env.example .env
 ```
@@ -54,7 +49,6 @@ cp .env.example .env
 ## Running the Agent
 
 ### Start Observability Stack (if not already running)
-
 ```bash
 cd ../monitor
 docker-compose up -d
@@ -68,9 +62,12 @@ This starts:
 - **Grafana** (port 3000) - Visualization dashboard
 
 ### Start the Agent
-
 ```bash
 chainlit run app.py
+
+# Or
+
+docker compose up -d
 ```
 
 The agent will be available at http://localhost:8000

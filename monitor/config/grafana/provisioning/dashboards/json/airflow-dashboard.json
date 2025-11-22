@@ -1881,7 +1881,7 @@
         ]
     },
     "timezone": "",
-    "title": "Airflow Monitoring Dashboard",
+    "title": "Airflow",
     "uid": "airflow-monitoring",
     "version": 1,
     "weekStart": ""
