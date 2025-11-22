@@ -1,0 +1,81 @@
+---
+- name: Deploy First Installation
+  hosts: ask_junior
+  become: true
+
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - git
+          - docker.io
+          - docker-compose
+        state: present
+        update_cache: yes
+      register: install_packages
+      retries: 5
+      delay: 60
+      until: install_packages is succeeded
+
+    - name: Ensure docker service is started
+      systemd:
+        name: docker
+        state: started
+        enabled: true
+    
+    - name: Ensure docker group exists
+      group:
+        name: "{{ docker_group_name }}"
+        state: present
+
+    - name: Add {{ agent_user }} to {{ docker_group_name }} group
+      user:
+        name: "{{ agent_user }}"
+        groups: "{{ docker_group_name }}"
+        append: yes
+
+    - name: Notify user to logout/login for group changes to take effect
+      debug:
+        msg: "User '{{ agent_user }}' was added to the '{{ docker_group_name }}' group. Please logout and login again for the changes to apply."
+
+    - name: Clone the repository
+      git:
+        repo: "{{ git_url }}"
+        dest: "/home/{{ agent_user }}/ask-junior"
+        version: main
+        force: yes
+      become_user: "{{ agent_user }}"
+
+    - name: Build and start agent services
+      shell: docker compose up -d --build
+      args:
+        chdir: "/home/{{ agent_user }}/ask-junior/agent"
+      become_user: "{{ agent_user }}"
+
+    - name: Build and start monitor services
+      shell: docker compose up -d --build
+      args:
+        chdir: "/home/{{ agent_user }}/ask-junior/monitor"
+      become_user: "{{ agent_user }}"
+
+    - name: Build and start integrations services
+      shell: docker compose up -d --build
+      args:
+        chdir: "/home/{{ agent_user }}/ask-junior/integrations"
+      become_user: "{{ agent_user }}"
+
+    - name: Build and start traefik services
+      shell: docker compose up -d --build
+      args:
+        chdir: "/home/{{ agent_user }}/ask-junior/traefik"
+      become_user: "{{ agent_user }}"
+
+    - name: Build and start vector_database services
+      shell: docker compose up -d --build
+      args:
+        chdir: "/home/{{ agent_user }}/ask-junior/vector_database"
+      become_user: "{{ agent_user }}"
+
+    - name: Display deployment completion message
+      debug:
+        msg: "All services have been deployed successfully!"
