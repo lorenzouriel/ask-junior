@@ -7,9 +7,8 @@
 
 A production-ready RAG (Retrieval-Augmented Generation) system that provides an intelligent conversational AI interface with full observability, automated knowledge base ingestion, and enterprise-grade infrastructure.
 
-## Architecture Overview
+Ask Junior is built as a microservices architecture with five core services that work together to deliver an AI knowledge base assistant.
 
-Ask Junior is built as a microservices architecture with five core services that work together to deliver an end-to-end AI-powered knowledge assistant.
 ![architecture](/docs/architecture.png)
 
 ## Services
