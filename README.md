@@ -222,16 +222,6 @@ Cloud-native reverse proxy:
 - Automatic service discovery via Docker
 - Dashboard on port 8888
 
-## Next Steps
-
-- [ ] Configure proper secrets management (not .env files)
-- [ ] Set up TLS certificates in Traefik
-- [ ] Configure Grafana with proper authentication
-- [ ] Set up backup retention for Weaviate
-- [ ] Configure Airflow for production (separate DB, workers)
-- [ ] Set resource limits appropriate for workload
-- [ ] Configure alerting in Prometheus/Grafana
-
 ## Ports Summary
 
 | Port | Service | Protocol |
