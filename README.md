@@ -10,70 +10,7 @@ A production-ready RAG (Retrieval-Augmented Generation) system that provides an 
 ## Architecture Overview
 
 Ask Junior is built as a microservices architecture with five core services that work together to deliver an end-to-end AI-powered knowledge assistant.
-```bash
-                    --------------------
-                    |  External Data   |
-                    |  Sources         |
-                    |  - Azure DevOps  |
-                    |  - Local Files   |
-                    ---------,----------
-                             |
-                             |
-              --------------------------------
-              |      INTEGRATIONS            |
-              |      (Apache Airflow)        |
-              |      Port: 8080              |
-              |                              |
-              |    Document extraction       |
-              |    Smart chunking            |
-              |    Vectorization pipeline    |
-              |    Scheduled syncs           |
-              ---------------,----------------
-                             |
-                             |
-              --------------------------------
-              |    VECTOR DATABASE           |
-              |    (Weaviate)                |
-              |    Port: 8081                |
-              |                              |
-              |    Semantic search           |
-              |    OpenAI embeddings         |
-              |    API key auth              |
-              ---------------,----------------
-                             |
-                             |
-              --------------------------------
-              |        AGENT                 |
-              |        (Chainlit)            |
-              |        Port: 8000            |
-              |                              |
-              |    Chat interface            |
-              |    RAG retrieval             |
-              |    OpenAI GPT-4              |
-              |    Conversation memory       |
-              ---------------,----------------
-                             |
-         --------------------<--------------------
-         |                   |                   |
-         |                   |                   |
-    -----------      ----------------    ----------------
-    |  User   |      |   OpenAI     |    |   MONITOR    |
-    |Response |      |   API        |    |  (Grafana,   |
-    -----------      ----------------    |  Prometheus, |
-                                         |  Loki, Tempo)|
-                                         |  Port: 3000  |
-                                         ----------------
-                                                |
-                                                |
-                            --------------------------------
-                            |         TRAEFIK              |
-                            |    (Reverse Proxy)           |
-                            |    Port: 80, 443             |
-                            |                              |
-                            |  Routes all services via     |
-                            |  *.local hostnames           |
-                            --------------------------------
-```
+![architecture](/docs/architecture.png)
 
 ## Services
 
