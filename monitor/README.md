@@ -1,6 +1,6 @@
 # Monitoring Stack
 
-A production-ready observability stack using OpenTelemetry, Prometheus, Loki, Tempo, and Grafana.
+Observability stack using OpenTelemetry, Prometheus, Loki, Tempo, and Grafana.
 
 ## Architecture
 
@@ -91,76 +91,6 @@ docker-compose ps
    - Correlated logs (click "Logs for this span")
    - Related metrics
 
-## Monitoring Your Own Applications
-
-### Instrumenting Applications
-
-#### Python with OpenTelemetry
-
-```python
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-
-# Setup
-trace.set_tracer_provider(TracerProvider())
-tracer = trace.get_tracer(__name__)
-span_exporter = OTLPSpanExporter(endpoint="http://localhost:4317", insecure=True)
-trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(span_exporter))
-
-# Use
-with tracer.start_as_current_span("operation_name"):
-    # Your code here
-    pass
-```
-
-#### Metrics Endpoint
-
-Expose Prometheus metrics on any port:
-
-```python
-from prometheus_client import start_http_server, Counter
-
-# Start metrics server
-start_http_server(8000)
-
-# Define metrics
-requests = Counter('my_app_requests_total', 'Total requests')
-requests.inc()
-```
-
-Then add to [config/prometheus.yml](config/prometheus.yml):
-
-```yaml
-- job_name: 'my-app'
-  static_configs:
-    - targets: ['my-app:8000']
-```
-
-## Maintenance
-
-### Viewing Logs
-
-```bash
-# All services
-docker-compose logs -f
-
-# Specific service
-docker-compose logs -f grafana
-docker-compose logs -f otel-collector
-```
-
-### Restarting Services
-
-```bash
-# Restart specific service
-docker-compose restart grafana
-
-# Restart all
-docker-compose restart
-```
-
 ### Updating Configuration
 
 After modifying config files:
@@ -172,34 +102,3 @@ docker-compose up -d --force-recreate otel-collector
 # Or restart all
 docker-compose restart
 ```
-
-### Backup Data
-
-```bash
-# Backup volumes
-docker run --rm -v monitor_prometheus-data:/data -v $(pwd):/backup ubuntu tar czf /backup/prometheus-backup.tar.gz /data
-docker run --rm -v monitor_loki-data:/data -v $(pwd):/backup ubuntu tar czf /backup/loki-backup.tar.gz /data
-docker run --rm -v monitor_grafana-data:/data -v $(pwd):/backup ubuntu tar czf /backup/grafana-backup.tar.gz /data
-```
-
-## Production Considerations
-
-### Security
-
-- Change default Grafana password immediately
-- Enable authentication on Prometheus and other services
-- Use TLS certificates (not included in this setup)
-- Restrict network access using firewalls
-
-### Scalability
-
-- Consider using remote storage for Prometheus (e.g., Thanos, Cortex)
-- Use distributed Loki with object storage
-- Deploy Tempo with object storage backend
-- Add load balancers for high availability
-
-### Monitoring the Monitors
-
-- Set up alerts in Prometheus for service health
-- Monitor disk usage for data volumes
-- Set up external health checks

@@ -14,7 +14,7 @@ A conversational AI agent built with Chainlit, featuring RAG (Retrieval-Augmente
 - **Configurable Settings**: Adjustable chunk retrieval and certainty thresholds
 
 ## Architecture
-```
+```bash
 User Query → Chainlit UI → Weaviate (Vector Search) → OpenAI GPT-4 → Response
                 ↓
           Observability Stack
@@ -73,9 +73,7 @@ docker compose up -d
 The agent will be available at http://localhost:8000
 
 ## Observability
-
 ### Viewing Traces, Logs, and Metrics
-
 1. Open Grafana: http://localhost:3000
    - Default credentials: admin/admin
 
@@ -85,7 +83,6 @@ The agent will be available at http://localhost:8000
    - **Prometheus** for metrics
 
 ### Key Metrics Tracked
-
 - agent.requests.total - Total number of requests
 - agent.request.duration - Request duration histogram
 - agent.errors.total - Total errors by type
@@ -93,32 +90,25 @@ The agent will be available at http://localhost:8000
 - agent.tokens.used - LLM token usage
 
 ### Traces
-
 All operations are traced:
 - handle_message - End-to-end message processing
 - weaviate_retrieval - Vector database queries
 - llm_inference - OpenAI API calls
 
 ## Memory Management
-
 ### SQLite Database Schema
-
 The agent stores conversation data in SQLite with the following tables:
-
 1. **sessions** - Chat sessions
 2. **messages** - Individual messages (user/assistant)
 3. **interactions** - Query-answer pairs with retrieval metadata
 4. **metrics** - Custom metrics per session
 
 ## Configuration
-
 ### Adjustable Settings (via UI)
-
 - **Number of chunks**: 1-20 (default: 5)
 - **Certainty threshold**: 0.0-1.0 (default: 0.75)
 
 ### Environment Variables
-
 | Variable | Description | Default |
 |----------|-------------|---------|
 | WEAVIATE_CLASS_NAME | Weaviate collection name | Required |
