@@ -5,7 +5,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/lorenzouriel/ask-junior)](https://github.com/lorenzouriel/ask-junior/issues)
 [![GitHub release](https://img.shields.io/github/v/release/lorenzouriel/ask-junior)](https://github.com/lorenzouriel/ask-junior/releases)
 
-A production-ready RAG (Retrieval-Augmented Generation) system that provides an intelligent conversational AI interface with full observability, automated knowledge base ingestion, and enterprise-grade infrastructure.
+A RAG (Retrieval-Augmented Generation) system that provides an intelligent conversational AI interface with full observability, automated knowledge base ingestion, and enterprise-grade infrastructure.
 
 Ask Junior is built as a microservices architecture with five core services that work together to deliver an AI knowledge base assistant.
 
